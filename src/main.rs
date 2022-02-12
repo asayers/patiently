@@ -69,7 +69,8 @@ struct State {
     qdir: PathBuf,
     id: usize,
     status: Status,
-    precursors: Vec<usize>,
+    // Reflects the status at the time new() was called.  May be stale.
+    precursors: Vec<(usize, Status)>,
 }
 
 impl State {
@@ -135,7 +136,7 @@ impl State {
         loop {
             while watches.len() < max_jobs {
                 match self.precursors.pop() {
-                    Some(x) => {
+                    Some((x, _)) => {
                         match inotify.add_watch(
                             &self.qdir.join(format!("patiently.{x}.{}", Status::Waiting)),
                             WatchMask::DELETE_SELF | WatchMask::MOVE_SELF,
@@ -203,11 +204,19 @@ impl State {
     }
 }
 
-fn get_precusors(qdir: &Path) -> anyhow::Result<(usize, Vec<usize>)> {
-    let mut next_id = 0;
-    let mut precursors = std::fs::read_dir(qdir)?
-        .filter_map(|x| x.ok())
+fn get_precusors(qdir: &Path) -> anyhow::Result<(usize, Vec<(usize, Status)>)> {
+    let mut precursors = list_jobs(qdir)?;
+    // Increment the ID regardless of the status
+    let next_id = precursors.iter().map(|x| x.0).max().map_or(0, |x| x + 1);
+    // Don't wait for completed jobs
+    precursors.retain(|(_, status)| !status.is_finished());
+    Ok((next_id, precursors))
+}
+
+fn list_jobs(qdir: &Path) -> anyhow::Result<Vec<(usize, Status)>> {
+    let mut jobs = std::fs::read_dir(qdir)?
         .filter_map(|x| {
+            let x = x.ok()?;
             match x.file_type() {
                 Ok(ft) if ft.is_file() => (),
                 _ => return None,
@@ -218,16 +227,12 @@ fn get_precusors(qdir: &Path) -> anyhow::Result<(usize, Vec<usize>)> {
                 return None;
             }
             let id: usize = tokens.next()?.parse().ok()?;
-            next_id = next_id.max(id + 1); // Increment the ID regardless of the status
             let status: Status = tokens.next()?.parse().ok()?;
-            if status.is_finished() {
-                return None; // Don't wait for completed jobs
-            }
-            Some(id)
+            Some((id, status))
         })
         .collect::<Vec<_>>();
-    precursors.sort_unstable();
-    Ok((next_id, precursors))
+    jobs.sort_unstable_by_key(|x| x.0);
+    Ok(jobs)
 }
 
 #[derive(Copy, Clone)]
