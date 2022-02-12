@@ -3,6 +3,7 @@ name = "patiently"
 description = "A simple parallel job queue"
 version = "0.1.0"
 readme = "README.md"
+license = "Unlicense"
 edition = "2021"
 
 [dependencies]
