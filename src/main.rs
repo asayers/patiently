@@ -54,12 +54,7 @@ fn main_3(opts: Opts, state: &mut State) -> anyhow::Result<()> {
         .context("While waiting for precursors")?;
 
     state.change_status(Status::Running)?;
-    let exit_code = Command::new("bash")
-        .arg("-c")
-        .arg(opts.cmd)
-        .stdout(File::options().append(true).open(&state.qfile())?)
-        .stderr(File::options().append(true).open(&state.qfile())?)
-        .status()?;
+    let exit_code = Command::new("bash").arg("-c").arg(opts.cmd).status()?;
 
     let final_status = if exit_code.success() {
         Status::Finished
