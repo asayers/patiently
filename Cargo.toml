@@ -7,3 +7,5 @@ edition = "2021"
 anyhow = "1.0.53"
 clap = { version = "3.0.14", features = ["derive"] }
 inotify = "0.10.0"
+tracing = "0.1.30"
+tracing-subscriber = "0.3.8"

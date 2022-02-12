@@ -6,6 +6,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str::FromStr;
+use tracing::*;
 
 #[derive(Parser)]
 struct Opts {
@@ -17,16 +18,29 @@ struct Opts {
 fn main() {
     if let Err(e) = main_2(Opts::parse()) {
         let es = e.chain().map(|x| x.to_string()).collect::<Vec<_>>();
-        eprintln!("[Error] {}", es.join(": "));
+        error!("{}", es.join(": "));
         process::exit(1);
     }
 }
 
 fn main_2(opts: Opts) -> anyhow::Result<()> {
+    let level_filter = match std::env::var("RUST_LOG") {
+        Ok(s) => s.parse()?,
+        Err(_) => tracing_subscriber::filter::LevelFilter::WARN,
+    };
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_max_level(level_filter)
+        .without_time()
+        .init();
+
     let qdir = std::env::var("QUEUE_DIR").map_or(PathBuf::from("."), PathBuf::from);
     std::fs::create_dir_all(&qdir)?;
     let mut state = State::new(qdir)?;
-    if let Err(e) = main_3(opts, &mut state).context(state.id) {
+    let res = info_span!("", id = state.id)
+        .in_scope(|| main_3(opts, &mut state))
+        .context(state.id);
+    if let Err(e) = res {
         // Make an attempt to mark the job as crashed, ignoring new errors
         let _ = state.change_status(Status::Crashed);
         return Err(e);
@@ -92,7 +106,7 @@ impl State {
             self.qdir.join(format!("patiently.{}.{to}", self.id)),
         )
         .context("Changing status")?;
-        println!("{}: {from} -> {to}", self.id);
+        info!(%from, %to, "Changing status");
         self.status = to;
         Ok(())
     }
@@ -103,11 +117,7 @@ impl State {
     }
 
     fn wait_for_precursors(&mut self, max_jobs: usize) -> anyhow::Result<()> {
-        println!(
-            "{}: Waiting for {} jobs to finish",
-            self.id,
-            self.precursors.len()
-        );
+        info!("Waiting for {} jobs to finish", self.precursors.len());
         let mut inotify = loop {
             match Inotify::init() {
                 Ok(x) => break x,
@@ -121,7 +131,7 @@ impl State {
                 Ok(x) => x,
                 Err(_) => {
                     // Our output file has already been deleted
-                    println!("{}: Output file removed", self.id);
+                    warn!("Output file removed, exiting");
                     process::exit(0);
                 }
             };
@@ -158,7 +168,7 @@ impl State {
                 .context("Getting events")?
             {
                 if ev.wd == our_wd {
-                    println!("{}: Output file removed", self.id);
+                    warn!("Output file removed, exiting");
                     process::exit(0);
                 }
                 match ev.mask {
