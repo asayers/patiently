@@ -34,7 +34,7 @@ fn main_2(opts: Opts) -> anyhow::Result<()> {
         .without_time()
         .init();
 
-    let qdir = std::env::var("QUEUE_DIR").map_or(PathBuf::from("."), PathBuf::from);
+    let qdir = std::env::var("QUEUE_DIR").map_or(PathBuf::from(".patiently"), PathBuf::from);
     std::fs::create_dir_all(&qdir)?;
     let mut state = State::new(qdir)?;
     let res = info_span!("", id = state.id)
