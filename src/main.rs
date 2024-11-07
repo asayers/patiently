@@ -49,24 +49,28 @@ fn main() -> anyhow::Result<ExitCode> {
 fn status(qdir: &QueueDir) -> anyhow::Result<()> {
     use std::fmt::Write;
     let mut tp = liveterm::TermPrinter::new(std::io::stdout());
+    let mut n_max = 0;
     loop {
         let jobs = qdir.list()?;
-        let mut totals = BTreeMap::<String, usize>::default();
+        n_max = n_max.max(jobs.len());
+        let mut per_status = BTreeMap::<String, usize>::default();
         for &id in &jobs {
             match qdir.get_status(id) {
-                Ok(status) => *totals.entry(status).or_default() += 1,
+                Ok(status) => *per_status.entry(status).or_default() += 1,
                 Err(e) => warn!("{}: {e}", id.0),
             }
         }
+        let n_running = jobs.len();
 
         tp.clear()?;
         tp.buf.clear();
-        for (status, count) in &totals {
+        for (status, count) in &per_status {
             writeln!(tp.buf, "{:>10}: {count}", status.to_string())?;
         }
+        writeln!(tp.buf, "{:>10}: {}", "finished", n_max - n_running)?;
         tp.print()?;
 
-        if totals.values().sum::<usize>() == 0 {
+        if n_running == 0 {
             break;
         }
 
