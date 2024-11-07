@@ -78,7 +78,7 @@ fn status(qdir: &QueueDir) -> anyhow::Result<()> {
 struct State {
     qdir: QueueDir,
     our_id: JobId,
-    file: File,
+    file: File, // Hold on to this to keep the flock alive
     ahead_of_us: Vec<JobId>,
 }
 
@@ -227,6 +227,13 @@ impl QueueDir {
                 );
                 continue;
             };
+            if let Err(_) = is_entry_stale(&dent.path()) {
+                warn!(
+                    %name, rsn = "entry is stale",
+                    "Ignoring unexpected entry in queue dir",
+                );
+                continue;
+            }
             jobs.push(JobId(id));
         }
         jobs.sort_unstable();
@@ -240,6 +247,7 @@ impl QueueDir {
     fn try_create(&self, id: JobId) -> std::io::Result<File> {
         let path = self.0.join(id.0.to_string());
         let file = File::options().create_new(true).write(true).open(path)?;
+        rustix::fs::flock(file.as_fd(), rustix::fs::FlockOperation::LockExclusive)?;
         Ok(file)
     }
 
@@ -249,5 +257,21 @@ impl QueueDir {
 
     fn get_status(&self, id: JobId) -> std::io::Result<String> {
         std::fs::read_to_string(self.0.join(id.0.to_string()))
+    }
+}
+
+fn is_entry_stale(path: &Path) -> std::io::Result<()> {
+    let file = File::open(path)?;
+    match rustix::fs::flock(file, rustix::fs::FlockOperation::NonBlockingLockShared) {
+        Err(Errno::AGAIN) => Ok(()), // It's locked, good
+        Err(e) => Err(e)?,
+        Ok(_) => {
+            std::fs::remove_file(path)?;
+            warn!(
+                path = %path.display(),
+                "Removed stale entry from queue dir",
+            );
+            Err(std::io::Error::other(""))
+        }
     }
 }
