@@ -12,8 +12,6 @@ $ patiently
    waiting: 632
    running: 8
   finished: 17
-    failed: 0
-   crashed: 0
 ```
 
 ## What does it do?
@@ -99,8 +97,6 @@ $ patiently
    waiting: 632
    running: 8
   finished: 17
-    failed: 0
-   crashed: 0
 ```
 
 ## Inspiration
