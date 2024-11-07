@@ -148,7 +148,7 @@ impl State {
         let ino_fd = inotify::init(inotify::CreateFlags::empty())?;
         let our_wd = match inotify::add_watch(
             &ino_fd,
-            &self.qdir.file_for(self.our_id),
+            self.qdir.file_for(self.our_id),
             inotify::WatchFlags::DELETE_SELF | inotify::WatchFlags::MOVE_SELF,
         ) {
             Ok(wd) => wd,
@@ -169,7 +169,7 @@ impl State {
                     Some(job) => {
                         match inotify::add_watch(
                             &ino_fd,
-                            &self.qdir.file_for(job),
+                            self.qdir.file_for(job),
                             inotify::WatchFlags::DELETE_SELF,
                         ) {
                             Ok(wd) => {
@@ -231,7 +231,7 @@ impl QueueDir {
                 );
                 continue;
             };
-            if let Err(_) = is_entry_stale(&dent.path()) {
+            if is_entry_stale(&dent.path()).is_err() {
                 warn!(
                     %name, rsn = "entry is stale",
                     "Ignoring unexpected entry in queue dir",
