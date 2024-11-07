@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use clap::Parser;
+use bpaf::Bpaf;
 use enum_map::{enum_map, Enum};
 use inotify::{EventMask, Inotify, WatchMask};
 use std::fmt;
@@ -9,15 +9,17 @@ use std::process::{self, Command};
 use std::str::FromStr;
 use tracing::*;
 
-#[derive(Parser)]
+#[derive(Bpaf)]
+#[bpaf(options)]
 struct Opts {
-    #[clap(short, long, default_value = "1")]
+    #[bpaf(short, long, fallback(1))]
     jobs: usize,
+    #[bpaf(positional("COMMAND"))]
     cmd: Option<String>,
 }
 
 fn main() {
-    if let Err(e) = main_2(Opts::parse()) {
+    if let Err(e) = main_2(opts().run()) {
         let es = e.chain().map(|x| x.to_string()).collect::<Vec<_>>();
         error!("{}", es.join(": "));
         process::exit(1);
