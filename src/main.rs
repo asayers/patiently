@@ -16,6 +16,8 @@ struct Opts {
     jobs: usize,
     #[bpaf(positional("COMMAND"))]
     cmd: Option<String>,
+    #[bpaf(positional)]
+    args: Vec<String>,
 }
 
 fn main() {
@@ -45,7 +47,7 @@ fn main_2(opts: Opts) -> anyhow::Result<()> {
         Some(cmd) => {
             let mut state = State::new(qdir)?;
             let res = info_span!("", id = state.id)
-                .in_scope(|| run_job(&mut state, cmd, opts.jobs))
+                .in_scope(|| run_job(&mut state, cmd, opts.args, opts.jobs))
                 .context(state.id);
             if let Err(e) = res {
                 // Make an attempt to mark the job as crashed, ignoring new errors
@@ -88,13 +90,13 @@ fn status(qdir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_job(state: &mut State, cmd: String, jobs: usize) -> anyhow::Result<()> {
+fn run_job(state: &mut State, cmd: String, args: Vec<String>, jobs: usize) -> anyhow::Result<()> {
     state
         .wait_for_precursors(jobs)
         .context("While waiting for precursors")?;
 
     state.change_status(Status::Running)?;
-    let exit_code = Command::new("bash").arg("-c").arg(cmd).status()?;
+    let exit_code = Command::new("bash").arg("-c").arg(format!("{cmd} {}", args.join(" "))).status()?;
 
     let final_status = if exit_code.success() {
         Status::Finished
