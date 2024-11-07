@@ -96,7 +96,7 @@ fn run_job(state: &mut State, cmd: String, args: Vec<String>, jobs: usize) -> an
         .context("While waiting for precursors")?;
 
     state.change_status(Status::Running)?;
-    let exit_code = Command::new("bash").arg("-c").arg(format!("{cmd} {}", args.join(" "))).status()?;
+    let exit_code = Command::new(cmd).args(args).status()?;
 
     let final_status = if exit_code.success() {
         Status::Finished
