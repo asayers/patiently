@@ -15,7 +15,7 @@ use tracing::*;
 #[bpaf(options)]
 struct Opts {
     #[bpaf(short, long, fallback(1))]
-    jobs: usize,
+    jobs: isize,
     #[bpaf(positional("COMMAND"))]
     cmd: Option<String>,
     #[bpaf(positional)]
@@ -42,7 +42,16 @@ fn main() -> anyhow::Result<ExitCode> {
             status(&qdir)?;
             Ok(ExitCode::SUCCESS)
         }
-        Some(cmd) => State::new(qdir)?.run(cmd, opts.args, opts.jobs),
+        Some(cmd) => {
+            let jobs = match opts.jobs {
+                1.. => usize::try_from(opts.jobs).unwrap(),
+                ..=0 => std::thread::available_parallelism()?
+                    .get()
+                    .saturating_add_signed(opts.jobs)
+                    .max(1),
+            };
+            State::new(qdir)?.run(cmd, opts.args, jobs)
+        }
     }
 }
 
